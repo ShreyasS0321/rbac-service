@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+
+# Secrets / local config
+.env
+*.pem
+*.key
+
+# Local database artifacts
+*.sqlite3
+pgdata/
+
+# Private working notes — not pushed
+_notes/
+Learnings.md
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
