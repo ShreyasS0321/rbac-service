@@ -5,6 +5,11 @@ from django.db import models
 from django.utils import timezone
 
 
+class Effect(models.TextChoices):
+    ALLOW = "allow", "Allow"
+    DENY = "deny", "Deny"
+
+
 class PrincipalManager(BaseUserManager):
     def create_user(self, username: str, password: str | None = None, **extra: Any) -> "Principal":
         if not username:
@@ -69,3 +74,40 @@ class Role(models.Model):
 
     def __str__(self) -> str:
         return self.key
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="grants")
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name="grants")
+    effect = models.CharField(max_length=5, choices=Effect.choices, default=Effect.ALLOW)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "permission"],
+                name="rbac_rolepermission_unique_role_perm",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.role.key} {self.effect} {self.permission}"
+
+
+class RoleEdge(models.Model):
+    parent = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="parent_edges")
+    child = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="child_edges")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent", "child"],
+                name="rbac_roleedge_unique_child_parent",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(child=models.F("parent")),
+                name="rbac_roleedge_no_self_loop",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.child.key} -> {self.parent.key}"
