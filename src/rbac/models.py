@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
@@ -111,3 +112,44 @@ class RoleEdge(models.Model):
 
     def __str__(self) -> str:
         return f"{self.child.key} -> {self.parent.key}"
+
+
+class RoleAssignment(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="assignments")
+    principal = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assignments"
+    )
+    scope_type = models.CharField(max_length=64, null=True, blank=True)
+    scope_id = models.CharField(max_length=64, null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="granted_assignments",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["principal", "role", "scope_type", "scope_id"],
+                condition=models.Q(scope_id__isnull=False),
+                name="rbac_assignment_unique_scoped",
+            ),
+            models.UniqueConstraint(
+                fields=["principal", "role"],
+                condition=models.Q(scope_id__isnull=True),
+                name="rbac_assignment_unique_global",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(scope_type__isnull=True, scope_id__isnull=True)
+                    | models.Q(scope_type__isnull=False, scope_id__isnull=False)
+                ),
+                name="rbac_assignment_scope_both_or_neither",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        scope = f"{self.scope_type}:{self.scope_id}" if self.scope_type else "global"
+        return f"{self.principal} = {self.role.key} @ {scope}"
