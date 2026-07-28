@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
@@ -11,11 +11,11 @@ class Effect(models.TextChoices):
     DENY = "deny", "Deny"
 
 
-class PrincipalManager(BaseUserManager):
+class PrincipalManager(BaseUserManager["Principal"]):
     def create_user(self, username: str, password: str | None = None, **extra: Any) -> "Principal":
         if not username:
             raise ValueError("username is required")
-        user: Principal = self.model(username=username, **extra)
+        user = self.model(username=username, **extra)
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -39,7 +39,7 @@ class Principal(AbstractBaseUser):
     objects = PrincipalManager()
 
     USERNAME_FIELD = "username"
-    REQUIRED_FIELDS: list[str] = []
+    REQUIRED_FIELDS: ClassVar[list[str]] = []
 
     def __str__(self) -> str:
         return self.username

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -85,7 +86,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-REST_FRAMEWORK = {
+REST_FRAMEWORK: dict[str, Any] = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
     "UNAUTHENTICATED_USER": None,
