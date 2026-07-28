@@ -40,6 +40,9 @@ extend-exclude = ["**/migrations/*"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "DJ"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/rbac/models.py" = ["DJ001"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

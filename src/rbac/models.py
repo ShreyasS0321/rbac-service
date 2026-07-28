@@ -153,3 +153,28 @@ class RoleAssignment(models.Model):
     def __str__(self) -> str:
         scope = f"{self.scope_type}:{self.scope_id}" if self.scope_type else "global"
         return f"{self.principal} = {self.role.key} @ {scope}"
+
+
+class AuditEvent(models.Model):
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=64)
+    target_type = models.CharField(max_length=64)
+    target_id = models.CharField(max_length=64)
+    before = models.JSONField(null=True)
+    after = models.JSONField(null=True)
+    request_id = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["target_type", "target_id"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} {self.target_type}:{self.target_id}"
