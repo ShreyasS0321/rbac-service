@@ -1,4 +1,6 @@
-from django.db import connection
+from django.db import connection, transaction
+
+from rbac.models import Role, RoleEdge
 
 _ROLE_CLOSURE_CTE = """
 WITH RECURSIVE role_closure AS (
@@ -62,3 +64,39 @@ def check(
     scope_id: str | None = None,
 ) -> bool:
     return permission_id in effective_permissions(principal_id, scope_type, scope_id)
+
+
+_ANCESTORS_SQL = """
+WITH RECURSIVE ancestors AS (
+    SELECT parent_id AS role_id
+    FROM   rbac_roleedge
+    WHERE  child_id = %(start)s
+
+    UNION
+
+    SELECT e.parent_id
+    FROM   rbac_roleedge e
+    JOIN   ancestors a ON e.child_id = a.role_id
+)
+SELECT role_id FROM ancestors;
+"""
+
+
+def _ancestor_ids(role_id: int) -> set[int]:
+    with connection.cursor() as cur:
+        cur.execute(_ANCESTORS_SQL, {"start": role_id})
+        return {row[0] for row in cur.fetchall()}
+
+
+class CycleError(ValueError):
+    pass
+
+
+def add_edge(child_id: int, parent_id: int) -> RoleEdge:
+    if child_id == parent_id:
+        raise CycleError("a role cannot inherit itself")
+    with transaction.atomic():
+        list(Role.objects.select_for_update().filter(id__in=[child_id, parent_id]))
+        if child_id in _ancestor_ids(parent_id):
+            raise CycleError("edge would create a cycle")
+        return RoleEdge.objects.create(child_id=child_id, parent_id=parent_id)

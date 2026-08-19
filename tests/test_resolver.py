@@ -4,7 +4,13 @@ import pytest
 from django.utils import timezone
 
 from rbac.models import Effect, RoleAssignment, RoleEdge, RolePermission
-from rbac.resolver import check, effective_permissions, resolved_role_ids
+from rbac.resolver import (
+    CycleError,
+    add_edge,
+    check,
+    effective_permissions,
+    resolved_role_ids,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -143,3 +149,40 @@ def test_scoped_permission_isolated(make_principal, make_role, make_permission):
     RoleAssignment.objects.create(principal=bob, role=admin, scope_type="org", scope_id="42")
     assert check(bob.id, manage.id, "org", "42") is True
     assert check(bob.id, manage.id, "org", "99") is False
+
+
+def test_add_edge_creates_edge(make_role):
+    child, parent = make_role("editor"), make_role("viewer")
+    edge = add_edge(child.id, parent.id)
+    assert edge.child_id == child.id and edge.parent_id == parent.id
+    assert RoleEdge.objects.filter(child=child, parent=parent).exists()
+
+
+def test_add_edge_rejects_self_loop(make_role):
+    role = make_role("viewer")
+    with pytest.raises(CycleError):
+        add_edge(role.id, role.id)
+
+
+def test_add_edge_rejects_direct_cycle(make_role):
+    a, b = make_role("a"), make_role("b")
+    add_edge(a.id, b.id)
+    with pytest.raises(CycleError):
+        add_edge(b.id, a.id)
+
+
+def test_add_edge_rejects_transitive_cycle(make_role):
+    a, b, c = make_role("a"), make_role("b"), make_role("c")
+    add_edge(a.id, b.id)
+    add_edge(b.id, c.id)
+    with pytest.raises(CycleError):
+        add_edge(c.id, a.id)
+
+
+def test_add_edge_allows_diamond(make_role):
+    lead, eng, mgr, emp = (make_role(k) for k in ("lead", "eng", "mgr", "emp"))
+    add_edge(lead.id, eng.id)
+    add_edge(lead.id, mgr.id)
+    add_edge(eng.id, emp.id)
+    add_edge(mgr.id, emp.id)
+    assert RoleEdge.objects.count() == 4
