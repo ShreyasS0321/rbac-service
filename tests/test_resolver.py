@@ -3,8 +3,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from rbac.models import RoleAssignment, RoleEdge
-from rbac.resolver import resolved_role_ids
+from rbac.models import Effect, RoleAssignment, RoleEdge, RolePermission
+from rbac.resolver import check, effective_permissions, resolved_role_ids
 
 pytestmark = pytest.mark.django_db
 
@@ -85,3 +85,61 @@ def test_future_expiry_still_active(make_principal, make_role):
         principal=alice, role=admin, expires_at=timezone.now() + timedelta(hours=1)
     )
     assert resolved_role_ids(alice.id) == {admin.id}
+
+
+def test_effective_permissions_direct_allow(make_principal, make_role, make_permission):
+    alice = make_principal("alice")
+    editor = make_role("editor")
+    write = make_permission("document", "write")
+    RoleAssignment.objects.create(principal=alice, role=editor)
+    RolePermission.objects.create(role=editor, permission=write, effect=Effect.ALLOW)
+    assert effective_permissions(alice.id) == {write.id}
+
+
+def test_permission_inherited_from_parent(make_principal, chain, make_permission):
+    viewer, editor, admin = chain
+    read = make_permission("document", "read")
+    RolePermission.objects.create(role=viewer, permission=read, effect=Effect.ALLOW)
+    alice = make_principal("alice")
+    RoleAssignment.objects.create(principal=alice, role=admin)
+    assert read.id in effective_permissions(alice.id)
+
+
+def test_deny_beats_allow_same_role(make_principal, make_role, make_permission):
+    alice = make_principal("alice")
+    editor = make_role("editor")
+    delete = make_permission("document", "delete")
+    RolePermission.objects.create(role=editor, permission=delete, effect=Effect.DENY)
+    RoleAssignment.objects.create(principal=alice, role=editor)
+    assert delete.id not in effective_permissions(alice.id)
+
+
+def test_inherited_deny_overrides_child_allow(make_principal, chain, make_permission):
+    viewer, editor, admin = chain
+    export = make_permission("document", "export")
+    RolePermission.objects.create(role=viewer, permission=export, effect=Effect.DENY)
+    RolePermission.objects.create(role=admin, permission=export, effect=Effect.ALLOW)
+    alice = make_principal("alice")
+    RoleAssignment.objects.create(principal=alice, role=admin)
+    assert export.id not in effective_permissions(alice.id)
+
+
+def test_check_true_and_false(make_principal, make_role, make_permission):
+    alice = make_principal("alice")
+    editor = make_role("editor")
+    write = make_permission("document", "write")
+    other = make_permission("document", "read")
+    RolePermission.objects.create(role=editor, permission=write, effect=Effect.ALLOW)
+    RoleAssignment.objects.create(principal=alice, role=editor)
+    assert check(alice.id, write.id) is True
+    assert check(alice.id, other.id) is False
+
+
+def test_scoped_permission_isolated(make_principal, make_role, make_permission):
+    bob = make_principal("bob")
+    admin = make_role("admin")
+    manage = make_permission("org", "manage")
+    RolePermission.objects.create(role=admin, permission=manage, effect=Effect.ALLOW)
+    RoleAssignment.objects.create(principal=bob, role=admin, scope_type="org", scope_id="42")
+    assert check(bob.id, manage.id, "org", "42") is True
+    assert check(bob.id, manage.id, "org", "99") is False
